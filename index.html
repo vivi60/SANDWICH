@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>소풍</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+    <style>
+        :root {
+            --euphoria-green: #57825a;
+            --soft-white: #fcfaf2;
+            --accent-wood: #d4a373;
+        }
+
+        body { 
+            margin: 0; 
+            overflow: hidden; 
+            background-color: var(--euphoria-green); 
+            font-family: 'Pretendard', sans-serif;
+            user-select: none;
+            cursor: crosshair; /* 마우스 포인터를 십자선으로 변경해서 조준하기 쉽게 함 */
+        }
+        
+        #ui-container {
+            position: absolute; top: 40px; width: 100%;
+            text-align: center;
+            pointer-events: none; z-index: 10;
+            color: var(--soft-white);
+        }
+        #score-board { 
+            font-size: 40px; font-weight: 800; 
+            text-shadow: 2px 2px 10px rgba(0,0,0,0.2);
+            margin-bottom: 8px;
+        }
+        #sub-text { font-size: 18px; opacity: 0.8; }
+
+        #restart-top-btn {
+            position: fixed; top: 20px; right: 20px; z-index: 30;
+            padding: 10px 20px; font-size: 14px;
+            background-color: rgba(255, 255, 255, 0.2);
+            color: white; border: 1px solid white;
+            border-radius: 20px; cursor: pointer; transition: 0.3s;
+            pointer-events: auto;
+        }
+        #restart-top-btn:hover { background-color: white; color: var(--euphoria-green); }
+
+        #game-over-screen {
+            position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            background: var(--soft-white);
+            padding: 60px; border-radius: 40px;
+            display: none; 
+            box-shadow: 0 30px 60px rgba(0,0,0,0.4);
+            z-index: 20;
+            border: 5px solid var(--accent-wood);
+        }
+        #game-over-screen h2 { color: var(--euphoria-green); font-size: 48px; margin: 0; }
+        #final-score { font-size: 26px; color: #444; margin: 25px 0; font-weight: 600; }
+        
+        .big-btn {
+            padding: 15px 45px; font-size: 22px; cursor: pointer;
+            background-color: var(--euphoria-green); color: white; 
+            border: none; border-radius: 60px; 
+            transition: all 0.2s;
+            box-shadow: 0 5px 0 #3e5c40;
+            font-weight: bold;
+        }
+        .big-btn:hover { transform: translateY(-3px); box-shadow: 0 8px 0 #3e5c40; }
+        .big-btn:active { transform: translateY(2px); box-shadow: none; }
+    </style>
+</head>
+<body>
+
+<div id="ui-container">
+    <div id="score-board">SCORE: <span id="score">0</span></div>
+    <div id="sub-text">재료를 쌓아 호그와트 최고의 샌드위치를 만드세요!</div>
+</div>
+
+<button id="restart-top-btn" onclick="resetGame()">다시하기</button>
+
+<div id="game-over-screen">
+    <h2>SANDWICH!</h2>
+    <p id="final-score">최종 점수: 0</p>
+    <button class="big-btn" onclick="resetGame()">다시 만들러 가기</button>
+</div>
+
+<script>
+    const { Engine, Render, Runner, Bodies, Composite, Events } = Matter;
+
+    let engine, render, runner;
+    let score = 0;
+    let isGameOver = false;
+
+    // 수정된 부분: 마우스 이벤트(e)를 받아서 x좌표를 활용함
+    function handleMouseDown(e) {
+        if (isGameOver) return;
+        
+        // 버튼 클릭 시에는 재료가 떨어지지 않도록 방지
+        if (e.target.tagName === 'BUTTON') return;
+
+        const items = [
+            { name: '호밀빵', w: 150, h: 25, color: '#E8BE8D', pts: 10 },
+            { name: '로스트햄', w: 130, h: 12, color: '#e5989b', pts: 5 },
+            { name: '체다치즈', w: 120, h: 10, color: '#ffcc33', pts: 5 },
+            { name: '싱싱한 상추', w: 160, h: 18, color: '#99d98c', pts: 15 },
+            { name: '잘 익은 토마토', w: 70, h: 30, color: '#ff4d4d', pts: 20 }
+        ];
+
+        const pick = items[Math.floor(Math.random() * items.length)];
+        
+        // e.clientX를 사용하여 마우스의 가로 위치에서 생성
+        const newIngredient = Bodies.rectangle(
+            e.clientX, 
+            80, 
+            pick.w, pick.h, 
+            { 
+                friction: 0.8,
+                restitution: 0.1,
+                render: { fillStyle: pick.color, lineWidth: 0 } 
+            }
+        );
+
+        Composite.add(engine.world, newIngredient);
+        score += pick.pts;
+        document.getElementById('score').innerText = score;
+    }
+
+    function init() {
+        isGameOver = false;
+        score = 0;
+        document.getElementById('score').innerText = '0';
+        document.getElementById('game-over-screen').style.display = 'none';
+
+        engine = Engine.create();
+        
+        render = Render.create({
+            element: document.body,
+            engine: engine,
+            options: {
+                width: window.innerWidth,
+                height: window.innerHeight,
+                wireframes: false,
+                background: 'transparent'
+            }
+        });
+
+        const plate = Bodies.rectangle(window.innerWidth / 2, window.innerHeight - 120, 350, 30, { 
+            isStatic: true, 
+            label: 'plate',
+            chamfer: { radius: 12 },
+            render: { fillStyle: '#d4a373' } 
+        });
+
+        const ground = Bodies.rectangle(window.innerWidth / 2, window.innerHeight + 60, window.innerWidth, 100, { 
+            isStatic: true, 
+            label: 'ground' 
+        });
+
+        Composite.add(engine.world, [plate, ground]);
+
+        Render.run(render);
+        runner = Runner.create();
+        Runner.run(runner, engine);
+
+        Events.on(engine, 'collisionStart', (event) => {
+            event.pairs.forEach(pair => {
+                if (pair.bodyA.label === 'ground' || pair.bodyB.label === 'ground') {
+                    gameOver();
+                }
+            });
+        });
+
+        window.removeEventListener('mousedown', handleMouseDown);
+        window.addEventListener('mousedown', handleMouseDown);
+    }
+
+    function gameOver() {
+        if (isGameOver) return;
+        isGameOver = true;
+        Runner.stop(runner);
+        document.getElementById('final-score').innerText = `최종 점수: ${score}`;
+        document.getElementById('game-over-screen').style.display = 'block';
+    }
+
+    function resetGame() {
+        window.removeEventListener('mousedown', handleMouseDown);
+        if (render) {
+            Render.stop(render);
+            render.canvas.remove();
+        }
+        if (runner) Runner.stop(runner);
+        if (engine) {
+            Composite.clear(engine.world);
+            Engine.clear(engine);
+        }
+        init();
+    }
+
+    init();
+
+    window.addEventListener('resize', () => {
+        if(render && render.canvas) {
+            render.canvas.width = window.innerWidth;
+            render.canvas.height = window.innerHeight;
+        }
+    });
+</script>
+</body>
+</html>
